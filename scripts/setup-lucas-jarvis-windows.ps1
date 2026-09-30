@@ -55,11 +55,26 @@ function Import-MsvcEnvironment {
   if (-not $installPath) { return $false }
   $devCmd = Join-Path $installPath "Common7\\Tools\\VsDevCmd.bat"
   if (-not (Test-Path $devCmd)) { return $false }
-  $envDump = cmd /s /c "`"`"$devCmd`" -arch=x64 -host_arch=x64 >nul && set`""
+  # Import the complete Developer Command Prompt environment.  PATH alone is
+  # not enough: Rust also needs INCLUDE/LIB/LIBPATH from the Windows SDK.
+  $envDump = cmd /c "`\"$devCmd`\" -arch=x64 -host_arch=x64 && set"
   foreach ($line in $envDump) {
-    if ($line -match "^([^=]+)=(.*)$") { Set-Item -Path "Env:$($matches[1])" -Value $matches[2] }
+    if ($line -match "^([^=]+)=(.*)$") {
+      Set-Item -Path "Env:$($matches[1])" -Value $matches[2]
+    }
   }
-  return [bool](Get-Command link.exe -ErrorAction SilentlyContinue)
+  $link = Get-Command link.exe -ErrorAction SilentlyContinue
+  $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
+  $kernel32 = $null
+  if ($env:WindowsSdkDir) {
+    $sdkLib = Join-Path $env:WindowsSdkDir "Lib"
+    if (Test-Path $sdkLib) {
+      $kernel32 = Get-ChildItem $sdkLib -Filter kernel32.lib -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -match "\\um\\x64\\kernel32\.lib$" } |
+        Select-Object -First 1
+    }
+  }
+  return [bool]($link -and $cl -and $kernel32)
 }
 
 $linkReady = Import-MsvcEnvironment
@@ -116,6 +131,9 @@ Step "Sincronizando dependencias do OpenJarvis + desktop/voz"
 uv sync --extra desktop
 
 Step "Compilando extensao nativa openjarvis_rust"
+if (-not (Import-MsvcEnvironment)) {
+  throw "MSVC/Windows SDK nao estao prontos para compilar: link.exe, cl.exe ou kernel32.lib ausente."
+}
 uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml
 $rustOk = uv run python -c "from openjarvis._rust_bridge import RUST_AVAILABLE; print(RUST_AVAILABLE)"
 if (($rustOk | Out-String).Trim() -ne "True") { throw "openjarvis_rust nao ficou disponivel." }
@@ -151,15 +169,19 @@ default_model = "qwen3.5:2b"
 
 [agent]
 default_agent = "orchestrator"
+context_from_memory = true
+
+[memory]
+enabled = true
+default_backend = "sqlite"
+backend = "local"
+extraction_model = "qwen3.5:2b"
+context_top_k = 8
+context_min_score = 0.0
+context_max_tokens = 2048
 
 [tools]
-enabled = [
-  "code_interpreter", "web_search", "file_read", "file_write", "apply_patch",
-  "shell_exec", "git_status", "git_diff", "git_log", "git_commit",
-  "memory_search", "memory_store", "memory_retrieve", "memory_manage",
-  "user_profile_manage", "audio_transcribe", "text_to_speech",
-  "windows_open_app", "windows_open_project", "windows_open_url", "skill_manage"
-]
+enabled = "code_interpreter,web_search,file_read,file_write,apply_patch,shell_exec,git_status,git_diff,git_log,git_commit,memory_search,memory_store,memory_retrieve,memory_manage,user_profile_manage,audio_transcribe,text_to_speech,windows_open_app,windows_open_project,windows_open_url,skill_manage"
 
 [security]
 profile = "personal"
