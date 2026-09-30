@@ -57,7 +57,8 @@ function Import-MsvcEnvironment {
   if (-not (Test-Path $devCmd)) { return $false }
   # Import the complete Developer Command Prompt environment.  PATH alone is
   # not enough: Rust also needs INCLUDE/LIB/LIBPATH from the Windows SDK.
-  $envDump = cmd /c "`\"$devCmd`\" -arch=x64 -host_arch=x64 && set"
+  $devCmdLine = '"' + $devCmd + '" -arch=x64 -host_arch=x64 && set'
+  $envDump = cmd /c $devCmdLine
   foreach ($line in $envDump) {
     if ($line -match "^([^=]+)=(.*)$") {
       Set-Item -Path "Env:$($matches[1])" -Value $matches[2]
