@@ -9,7 +9,7 @@ $configPath = Join-Path $configDir "config.toml"
 New-Item -ItemType Directory -Force $configDir | Out-Null
 if (Test-Path $configPath) { Copy-Item $configPath "$configPath.before-lucas-final.bak" -Force }
 
-@'
+$configText = @'
 [engine]
 default = "ollama"
 
@@ -54,11 +54,13 @@ default_channel = "whatsapp_baileys"
 [channel.whatsapp_baileys]
 assistant_name = "Jarvis"
 assistant_has_own_number = false
-'@ | Set-Content -Encoding UTF8 $configPath
+'@
+[System.IO.File]::WriteAllText($configPath, $configText, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host "[1/7] Dependencias..." -ForegroundColor Yellow
 uv sync --extra desktop --extra voice --group desktop-native
-uv run python -c "import tomli, pathlib; tomli.loads((pathlib.Path.home()/'.openjarvis'/'config.toml').read_text(encoding='utf-8-sig')); print('config OK')"
+uv run python -c "from openjarvis.core.config import load_config; load_config(); print('config OK')"
+if ($LASTEXITCODE -ne 0) { throw "config.toml invalido." }
 uv run python -c "import openjarvis_rust; print('rust OK')"
 
 Write-Host "[2/7] Modelo local..." -ForegroundColor Yellow
@@ -74,9 +76,18 @@ if ($LASTEXITCODE -ne 0) { Write-Warning "tech-fast-track nao apareceu na listag
 
 Write-Host "[5/7] Instalando frontend..." -ForegroundColor Yellow
 Push-Location (Join-Path $root "frontend")
-npm install --no-audit --no-fund
+$npmMajor = [int]((& npm.cmd --version).Split(".")[0])
+$npmMinor = [int]((& npm.cmd --version).Split(".")[1])
+if ($npmMajor -lt 11 -or ($npmMajor -eq 11 -and $npmMinor -lt 19)) {
+  Write-Host "Atualizando npm para >=11.19 <12..." -ForegroundColor Yellow
+  & npm.cmd install -g npm@11
+  if ($LASTEXITCODE -ne 0) { throw "Falha ao atualizar npm." }
+}
+& npm.cmd install --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw "Falha ao instalar dependencias do frontend." }
 Write-Host "[6/7] Compilando Desktop..." -ForegroundColor Yellow
-npm run tauri build
+& npm.cmd run tauri build
+if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Falha ao compilar o Desktop Tauri." }
 Pop-Location
 
 $exe = Join-Path $root "frontend\src-tauri\target\release\openjarvis-desktop.exe"
