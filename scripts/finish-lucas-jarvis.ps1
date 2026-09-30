@@ -56,14 +56,21 @@ profile = "personal"
 
 [speech]
 backend = "faster-whisper"
+model = "base"
+language = "pt"
+device = "cpu"
+compute_type = "int8"
+tts_backend = "kokoro"
+voice_id = "pf_dora"
+voice_speed = 1.0
 '@ | Set-Content -Encoding ASCII $configPath
 
 # Validate immediately so the desktop never starts with malformed TOML.
-uv run python -c "import tomllib, pathlib; p=pathlib.Path.home()/'.openjarvis'/'config.toml'; tomllib.loads(p.read_text(encoding='utf-8')); print('config.toml OK')"
+uv run python -c "import tomli, pathlib; p=pathlib.Path.home()/'.openjarvis'/'config.toml'; tomli.loads(p.read_text(encoding='utf-8')); print('config.toml OK')"
 if ($LASTEXITCODE -ne 0) { throw "config.toml invalido." }
 
 Write-Host "[1/6] Sincronizando backend..." -ForegroundColor Yellow
-uv sync --extra desktop --group desktop-native
+uv sync --extra desktop --extra voice --group desktop-native
 Write-Host "[2/6] Validando extensao nativa e memoria..." -ForegroundColor Yellow
 uv run python -c "import openjarvis_rust; print('openjarvis_rust OK')"
 uv run jarvis memory stats
