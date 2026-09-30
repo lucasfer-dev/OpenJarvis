@@ -73,6 +73,9 @@ if (Test-Path (Join-Path $InstallDir ".git")) {
 
 Set-Location $InstallDir
 Step "Configurando backend, voz, memoria, modelo e Desktop"
+# Reinstala o pacote bloqueado do PyTorch para corrigir ambientes Windows parcialmente atualizados.
+& uv.exe sync --extra desktop --extra voice --group desktop-native --reinstall-package torch
+if ($LASTEXITCODE -ne 0) { throw "Falha ao preparar PyTorch para voz." }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup-lucas-jarvis-windows.ps1"
 if ($LASTEXITCODE -ne 0) { throw "Setup base do Jarvis falhou (codigo $LASTEXITCODE)." }
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\finish-lucas-jarvis.ps1"
