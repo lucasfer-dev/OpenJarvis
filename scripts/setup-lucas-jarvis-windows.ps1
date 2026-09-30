@@ -41,6 +41,38 @@ rustup default stable
 $rustVersion = (& rustc --version)
 Write-Host $rustVersion
 
+Step "Garantindo Microsoft C++ Build Tools para o Rust"
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\\Installer\\vswhere.exe"
+$linkFound = Get-Command link.exe -ErrorAction SilentlyContinue
+if (-not $linkFound) {
+  $hasCppTools = $false
+  if (Test-Path $vswhere) {
+    $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if ($installPath) { $hasCppTools = $true }
+  }
+  if (-not $hasCppTools) {
+    Write-Host "Instalando Visual Studio Build Tools (C++). Pode abrir uma janela/UAC."
+    winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" --accept-package-agreements --accept-source-agreements
+  } else { Write-Host "OK: Visual C++ Build Tools ja instalado" }
+}
+
+# Carrega o ambiente MSVC no processo atual para que Cargo encontre link.exe.
+if (Test-Path $vswhere) {
+  $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+  if ($installPath) {
+    $devCmd = Join-Path $installPath "Common7\\Tools\\VsDevCmd.bat"
+    if (Test-Path $devCmd) {
+      $envDump = cmd /s /c "`"`"$devCmd`" -arch=x64 -host_arch=x64 >nul && set`""
+      foreach ($line in $envDump) {
+        if ($line -match "^([^=]+)=(.*)$") { Set-Item -Path "Env:$($matches[1])" -Value $matches[2] }
+      }
+    }
+  }
+}
+if (-not (Get-Command link.exe -ErrorAction SilentlyContinue)) {
+  throw "Microsoft C++ linker (link.exe) ainda nao esta disponivel. Reinicie o PowerShell e execute o setup novamente."
+}
+
 Step "Sincronizando dependencias do OpenJarvis + desktop/voz"
 uv sync --extra desktop
 
