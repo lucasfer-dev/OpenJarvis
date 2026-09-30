@@ -73,12 +73,16 @@ if (Test-Path (Join-Path $InstallDir ".git")) {
 
 Set-Location $InstallDir
 Step "Configurando backend, voz, memoria, modelo e Desktop"
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup-lucas-jarvis-windows.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\scripts\finish-lucas-jarvis.ps1"
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\setup-lucas-jarvis-windows.ps1"
+if ($LASTEXITCODE -ne 0) { throw "Setup base do Jarvis falhou (codigo $LASTEXITCODE)." }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\finish-lucas-jarvis.ps1"
+if ($LASTEXITCODE -ne 0) { throw "Finalizacao do Jarvis falhou (codigo $LASTEXITCODE)." }
 
 Step "Teste de saude"
-uv run python -c "import kokoro, openjarvis_rust; print('Kokoro OK'); print('Rust OK')"
-uv run jarvis memory stats
+& uv.exe run python -c "import kokoro, openjarvis_rust; from openjarvis.core.config import load_config; load_config(); print('Kokoro OK'); print('Rust OK'); print('Config OK')"
+if ($LASTEXITCODE -ne 0) { throw "Teste Python final falhou." }
+& uv.exe run jarvis memory stats
+if ($LASTEXITCODE -ne 0) { throw "Teste de memoria final falhou." }
 
 Write-Host ""
 Write-Host "====================================================" -ForegroundColor Green
