@@ -1125,6 +1125,10 @@ def _tts_voice_and_speed(request: Request, backend) -> tuple[str, float]:
     active = getattr(backend, "backend_id", "")
     if active and active != preferred:
         voice_id = default_voice_for(active)
+    # A healthy backend must always expose a usable voice to Desktop. This
+    # also covers older config files created before voice_id was persisted.
+    if not voice_id and active:
+        voice_id = default_voice_for(active)
     return voice_id, speed
 
 

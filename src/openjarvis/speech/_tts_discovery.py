@@ -22,7 +22,7 @@ TTS_BACKEND_ORDER = ("kokoro", "openai_tts", "cartesia")
 # only to ``speech.tts_backend``; if synthesis falls back to another backend we
 # use that backend's own default rather than passing an unrecognized ID through.
 BACKEND_DEFAULT_VOICE = {
-    "kokoro": "bm_george",  # British male
+    "kokoro": "pf_dora",  # Brazilian Portuguese female
     "openai_tts": "onyx",  # deepest OpenAI preset
     "cartesia": "",  # no safe static default; let Cartesia choose
 }
