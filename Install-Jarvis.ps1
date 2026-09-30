@@ -39,7 +39,8 @@ if (-not (Has "uv")) {
 if (-not (Has "uv")) { throw "uv nao ficou disponivel no PATH." }
 
 Step "Preparando compilador nativo"
-$vswhere = Join-Path \${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+$pf86 = [Environment]::GetFolderPath("ProgramFilesX86")
+$vswhere = Join-Path $pf86 "Microsoft Visual Studio\Installer\vswhere.exe"
 $hasMsvc = $false
 if (Test-Path $vswhere) {
   $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
