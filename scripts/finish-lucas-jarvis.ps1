@@ -89,6 +89,14 @@ if ($npmMajor -lt 11 -or ($npmMajor -eq 11 -and $npmMinor -lt 19)) {
 & npm.cmd install --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw "Falha ao instalar dependencias do frontend." }
 Write-Host "[6/7] Compilando Desktop..." -ForegroundColor Yellow
+# Windows nao permite substituir o executavel enquanto o Desktop esta aberto.
+# Fecha somente o processo do Lucas Jarvis antes do rebuild/update.
+$desktopProcesses = Get-Process -Name "openjarvis-desktop" -ErrorAction SilentlyContinue
+if ($desktopProcesses) {
+  Write-Host "Fechando Lucas Jarvis Desktop para atualizar..." -ForegroundColor Yellow
+  $desktopProcesses | Stop-Process -Force
+  Start-Sleep -Seconds 2
+}
 & npm.cmd run tauri build
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Falha ao compilar o Desktop Tauri." }
 Pop-Location
