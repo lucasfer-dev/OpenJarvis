@@ -65,11 +65,17 @@ if (-not $linkReady) {
   $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   if (-not $isAdmin) {
     Write-Host "O C++ Build Tools precisa de elevacao. Abrindo uma unica janela de Administrador..."
-    $self = $MyInvocation.MyCommand.Path
-    $args = "-NoProfile -ExecutionPolicy Bypass -File `"$self`""
-    if ($SkipModel) { $args += " -SkipModel" }
-    Start-Process powershell.exe -Verb RunAs -ArgumentList $args -Wait
-    exit $LASTEXITCODE
+    $self = $PSCommandPath
+    if (-not $self) { $self = $MyInvocation.MyCommand.Path }
+    $logPath = Join-Path $env:TEMP "lucas-jarvis-setup-admin.log"
+    $skipArg = if ($SkipModel) { " -SkipModel" } else { "" }
+    $escapedSelf = $self.Replace("'","''")
+    $escapedLog = $logPath.Replace("'","''")
+    $command = "& '$escapedSelf'$skipArg *>&1 | Tee-Object -FilePath '$escapedLog'; if (`$LASTEXITCODE -ne 0) { Write-Host ''; Write-Host 'Setup falhou. Log: $escapedLog' -ForegroundColor Red; Read-Host 'Pressione ENTER para fechar' }"
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    $p = Start-Process powershell.exe -Verb RunAs -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-EncodedCommand",$encoded) -Wait -PassThru
+    if ($p.ExitCode -ne 0) { throw "A etapa elevada falhou. Log salvo em $logPath" }
+    exit 0
   }
 
   $bootstrapper = Join-Path $env:TEMP "vs_buildtools.exe"
