@@ -9,8 +9,6 @@ import re
 import subprocess
 import sys
 import time
-from typing import Any
-
 import click
 from rich.console import Console
 
