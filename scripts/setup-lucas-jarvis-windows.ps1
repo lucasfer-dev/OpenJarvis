@@ -31,6 +31,11 @@ if (-not (Has "uv")) {
 if (-not (Has "uv")) { throw "uv foi instalado, mas ainda nao esta no PATH. Feche o PowerShell, abra novamente e execute este script de novo." }
 
 Step "Instalando/atualizando Rust"
+# Uma janela elevada pode nao herdar o PATH atualizado do usuario.
+$cargoBin = Join-Path $env:USERPROFILE ".cargo\\bin"
+if (Test-Path $cargoBin) {
+  $env:Path = "$cargoBin;$env:Path"
+}
 if (-not (Has "rustup")) {
   winget install --id Rustlang.Rustup -e --accept-package-agreements --accept-source-agreements
   $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
