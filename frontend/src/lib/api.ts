@@ -406,6 +406,19 @@ export async function synthesizeSpeech(
   text: string,
   opts: { voiceId?: string; speed?: number; signal?: AbortSignal } = {},
 ): Promise<Blob> {
+  if (isTauri()) {
+    try {
+      const bytes = await tauriInvoke<number[]>('synthesize_speech', {
+        text,
+        voiceId: opts.voiceId,
+        speed: opts.speed,
+      });
+      return new Blob([new Uint8Array(bytes)], { type: 'audio/wav' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(msg || 'Speech synthesis failed');
+    }
+  }
   const res = await apiFetch(`/v1/speech/synthesize`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -426,7 +439,14 @@ export async function synthesizeSpeech(
 }
 
 export async function fetchTtsHealth(): Promise<TtsHealth> {
-  const res = await apiFetch(`/v1/speech/tts/health`);
+  if (isTauri()) {
+    try {
+      return await tauriInvoke<TtsHealth>('tts_health');
+    } catch {
+      return { available: false };
+    }
+  }
+  const res = await apiFetch(`/v1/speech/tts/health`, { cache: 'no-store' });
   if (!res.ok) return { available: false };
   return res.json();
 }
