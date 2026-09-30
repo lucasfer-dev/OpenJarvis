@@ -58,7 +58,7 @@ assistant_has_own_number = false
 
 Write-Host "[1/7] Dependencias..." -ForegroundColor Yellow
 uv sync --extra desktop --extra voice --group desktop-native
-uv run python -c "import tomllib, pathlib; tomllib.loads((pathlib.Path.home()/'.openjarvis'/'config.toml').read_text(encoding='utf-8-sig')); print('config OK')"
+uv run python -c "import tomli, pathlib; tomli.loads((pathlib.Path.home()/'.openjarvis'/'config.toml').read_text(encoding='utf-8-sig')); print('config OK')"
 uv run python -c "import openjarvis_rust; print('rust OK')"
 
 Write-Host "[2/7] Modelo local..." -ForegroundColor Yellow
