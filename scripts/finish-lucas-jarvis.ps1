@@ -56,7 +56,11 @@ profile = "personal"
 
 [speech]
 backend = "faster-whisper"
-'@ | Set-Content -Encoding UTF8 $configPath
+'@ | Set-Content -Encoding ASCII $configPath
+
+# Validate immediately so the desktop never starts with malformed TOML.
+uv run python -c "import tomllib, pathlib; p=pathlib.Path.home()/'.openjarvis'/'config.toml'; tomllib.loads(p.read_text(encoding='utf-8')); print('config.toml OK')"
+if ($LASTEXITCODE -ne 0) { throw "config.toml invalido." }
 
 Write-Host "[1/6] Sincronizando backend..." -ForegroundColor Yellow
 uv sync --extra desktop --group desktop-native
