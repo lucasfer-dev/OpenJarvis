@@ -164,7 +164,7 @@ if (Test-Path $configPath) {
   $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
   Copy-Item $configPath "$configPath.backup-$stamp"
 }
-@'
+$configText = @'
 [engine]
 default = "ollama"
 
@@ -192,7 +192,10 @@ enabled = "code_interpreter,web_search,file_read,file_write,apply_patch,shell_ex
 
 [security]
 profile = "personal"
-'@ | Set-Content -Path $configPath -Encoding UTF8
+'@
+[System.IO.File]::WriteAllText($configPath, $configText, (New-Object System.Text.UTF8Encoding($false)))
+uv run python -c "from openjarvis.core.config import load_config; load_config(); print('config OK')"
+if ($LASTEXITCODE -ne 0) { throw "config.toml invalido." }
 
 Step "Validando memoria, skill e ferramentas"
 uv run jarvis memory stats
