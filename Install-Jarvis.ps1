@@ -14,8 +14,11 @@ function Refresh-Path {
   $user=[Environment]::GetEnvironmentVariable("Path","User")
   $env:Path="$machine;$user;$env:USERPROFILE\.cargo\bin;$env:USERPROFILE\.local\bin"
 }
-function Winget([string]$id) {
-  winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements
+function Install-WithWinget([string]$id) {
+  & winget.exe install --id $id -e --silent --accept-package-agreements --accept-source-agreements
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning "winget retornou codigo $LASTEXITCODE ao instalar $id. Verificando novamente..."
+  }
   Refresh-Path
 }
 
@@ -24,11 +27,11 @@ if (-not (Has "winget")) {
 }
 
 Step "Instalando pre-requisitos ausentes"
-if (-not (Has "git"))    { Winget "Git.Git" }
-if (-not (Has "python")) { Winget "Python.Python.3.10" }
-if (-not (Has "node"))   { Winget "OpenJS.NodeJS" }
-if (-not (Has "ollama")) { Winget "Ollama.Ollama" }
-if (-not (Has "rustup")) { Winget "Rustlang.Rustup" }
+if (-not (Has "git"))    { Install-WithWinget "Git.Git" }
+if (-not (Has "python")) { Install-WithWinget "Python.Python.3.10" }
+if (-not (Has "node"))   { Install-WithWinget "OpenJS.NodeJS" }
+if (-not (Has "ollama")) { Install-WithWinget "Ollama.Ollama" }
+if (-not (Has "rustup")) { Install-WithWinget "Rustlang.Rustup" }
 Refresh-Path
 
 if (-not (Has "uv")) {
