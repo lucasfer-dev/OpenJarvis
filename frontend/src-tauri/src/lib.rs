@@ -91,11 +91,17 @@ fn models_that_fit_in(ram_gb: f64) -> Vec<&'static str> {
 /// `ram_gb`. Falls back to the only fitting model, or FALLBACK_MODEL if none
 /// fit. Deliberately NOT the largest — leaves RAM headroom for the OS/app.
 fn default_local_model(ram_gb: f64) -> &'static str {
-    let fitting = models_that_fit_in(ram_gb);
-    match fitting.len() {
-        0 => FALLBACK_MODEL,
-        1 => fitting[0],
-        n => fitting[n - 2],
+    // Lucas Jarvis is voice-first: predictable latency matters more than
+    // automatically consuming all available RAM. Keep the fast 2B model as
+    // the default whenever the machine can run it; larger models remain
+    // selectable from the UI for heavier tasks.
+    if ram_gb >= 6.0 {
+        STARTUP_MODEL
+    } else {
+        models_that_fit_in(ram_gb)
+            .last()
+            .copied()
+            .unwrap_or(FALLBACK_MODEL)
     }
 }
 

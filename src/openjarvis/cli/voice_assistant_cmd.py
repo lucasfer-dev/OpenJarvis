@@ -5,8 +5,11 @@ processed locally; only utterances beginning with the wake word are dispatched.
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
+import urllib.error
+import urllib.request
 import sys
 import time
 import click
@@ -25,8 +28,35 @@ def _extract_command(text: str, wake_word: str) -> str | None:
     return match.group(1).strip()
 
 
+def _run_via_server(command: str) -> str | None:
+    """Use the already-running Desktop API to avoid a Python cold start per phrase."""
+    payload = json.dumps(
+        {
+            "model": "qwen3.5:2b",
+            "messages": [{"role": "user", "content": command}],
+            "stream": False,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        "http://127.0.0.1:8000/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        return body["choices"][0]["message"]["content"].strip()
+    except (OSError, KeyError, IndexError, TypeError, ValueError, urllib.error.URLError):
+        return None
+
+
 def _run_jarvis(command: str) -> str:
-    """Use the normal ask path so memory, orchestrator and tools stay identical."""
+    """Prefer the warm Desktop server; fall back to the normal CLI ask path."""
+    warm_answer = _run_via_server(command)
+    if warm_answer is not None:
+        return warm_answer
+
     proc = subprocess.run(
         [sys.executable, "-m", "openjarvis.cli", "--quiet", "ask", command],
         capture_output=True,
