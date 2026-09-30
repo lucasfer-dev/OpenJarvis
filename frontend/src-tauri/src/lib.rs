@@ -9,10 +9,10 @@ use tokio::sync::Mutex;
 const OLLAMA_PORT: u16 = 11434;
 const JARVIS_PORT: u16 = 8000;
 const DESKTOP_UV_SYNC_COMMAND: &str =
-    "uv sync --extra desktop --extra inference-cloud --extra inference-google --group desktop-native";
+    "uv sync --extra desktop --extra voice --extra inference-cloud --extra inference-google --group desktop-native";
 
 /// Small, fast model used when startup needs a default Ollama tag.
-const STARTUP_MODEL: &str = "qwen3.5:4b";
+const STARTUP_MODEL: &str = "qwen3.5:2b";
 
 /// Tiny fallback model if even the startup model can't be pulled.
 const FALLBACK_MODEL: &str = "qwen3:0.6b";
@@ -22,7 +22,7 @@ const FALLBACK_MODEL: &str = "qwen3:0.6b";
 const QWEN35_MODELS: &[(&str, f64, f64)] = &[
     ("qwen3.5:0.8b", 1.0, 4.0),
     ("qwen3.5:2b", 2.7, 6.0),
-    ("qwen3.5:4b", 3.4, 8.0),
+    ("qwen3.5:2b", 3.4, 8.0),
     ("qwen3.5:9b", 6.6, 12.0),
     ("qwen3.5:27b", 17.0, 24.0),
     ("qwen3.5:35b", 24.0, 32.0),
@@ -139,7 +139,7 @@ fn boot_plan(cfg: &InferenceConfig, ram_gb: f64) -> BootPlan {
                     "--model".into(),
                     model,
                     "--agent".into(),
-                    "simple".into(),
+                    "orchestrator".into(),
                 ],
             }
         }
@@ -170,7 +170,7 @@ fn boot_plan(cfg: &InferenceConfig, ram_gb: f64) -> BootPlan {
                     "--model".into(),
                     model,
                     "--agent".into(),
-                    "simple".into(),
+                    "orchestrator".into(),
                 ],
             }
         }
@@ -1275,7 +1275,7 @@ async fn boot_backend(backend: SharedBackend, status: SharedStatus) {
                 "clone",
                 "--depth",
                 "1",
-                "https://github.com/open-jarvis/OpenJarvis.git",
+                "https://github.com/lucasfer-dev/OpenJarvis.git",
                 &clone_target,
             ])
             .stdout(std::process::Stdio::null())
@@ -3656,7 +3656,7 @@ mod tests {
         // QWEN35_MODELS min_ram ladder: 4,6,8,12,24,32,96 GB
         assert_eq!(default_local_model(4.0), "qwen3.5:0.8b"); // only one fits
         assert_eq!(default_local_model(8.0), "qwen3.5:2b"); // fits 0.8/2/4 → 2nd-largest
-        assert_eq!(default_local_model(16.0), "qwen3.5:4b"); // fits ..9b → 2nd-largest
+        assert_eq!(default_local_model(16.0), "qwen3.5:2b"); // fits ..9b → 2nd-largest
         assert_eq!(default_local_model(32.0), "qwen3.5:27b"); // fits 0.8/2/4/9/27/35b → 2nd-largest is 27b
         assert_eq!(default_local_model(128.0), "qwen3.5:35b"); // fits all → 2nd-largest
     }
@@ -3672,7 +3672,7 @@ mod tests {
             "models": [
                 {"name": "llama3.2:latest"},
                 {"name": ""},
-                {"name": "qwen3.5:4b"},
+                {"name": "qwen3.5:2b"},
                 {"model": "mistral:latest"}
             ]
         });
@@ -3680,7 +3680,7 @@ mod tests {
             parse_ollama_model_names(&body),
             vec![
                 "llama3.2:latest".to_string(),
-                "qwen3.5:4b".to_string(),
+                "qwen3.5:2b".to_string(),
                 "mistral:latest".to_string()
             ]
         );
@@ -3690,13 +3690,13 @@ mod tests {
     fn model_names_match_treats_latest_as_optional() {
         assert!(model_names_match("llama3.2:latest", "llama3.2"));
         assert!(model_names_match("llama3.2", "llama3.2:latest"));
-        assert!(model_names_match("qwen3.5:4b", "qwen3.5:4b"));
-        assert!(!model_names_match("llama3.2:latest", "qwen3.5:4b"));
+        assert!(model_names_match("qwen3.5:2b", "qwen3.5:2b"));
+        assert!(!model_names_match("llama3.2:latest", "qwen3.5:2b"));
     }
 
     #[test]
     fn installed_model_helpers_pick_matching_or_first_model() {
-        let models = vec!["llama3.2:latest".to_string(), "qwen3.5:4b".to_string()];
+        let models = vec!["llama3.2:latest".to_string(), "qwen3.5:2b".to_string()];
         assert_eq!(
             matching_installed_model(&models, "llama3.2"),
             Some("llama3.2:latest".to_string())
@@ -3723,7 +3723,7 @@ mod tests {
     fn startup_installed_model_uses_existing_model_for_defaults() {
         let models = vec!["llama3.2:latest".to_string()];
         assert_eq!(
-            startup_installed_model("qwen3.5:4b", &models),
+            startup_installed_model("qwen3.5:2b", &models),
             Some("llama3.2:latest".to_string())
         );
     }
@@ -3732,7 +3732,7 @@ mod tests {
     fn startup_installed_model_uses_existing_model_when_configured_model_missing() {
         let models = vec!["llama3.2:latest".to_string()];
         assert_eq!(
-            startup_installed_model("qwen3.5:4b", &models),
+            startup_installed_model("qwen3.5:2b", &models),
             Some("llama3.2:latest".to_string())
         );
     }
@@ -3847,7 +3847,7 @@ mod tests {
         };
         let plan = boot_plan(&cfg, 16.0);
         assert!(plan.launch_ollama);
-        assert_eq!(plan.model_to_pull.as_deref(), Some("qwen3.5:4b"));
+        assert_eq!(plan.model_to_pull.as_deref(), Some("qwen3.5:2b"));
         assert!(plan.engine_host.is_none());
         assert!(plan
             .serve_args
@@ -3856,7 +3856,7 @@ mod tests {
         assert!(plan
             .serve_args
             .windows(2)
-            .any(|w| w == ["--model", "qwen3.5:4b"]));
+            .any(|w| w == ["--model", "qwen3.5:2b"]));
     }
 
     #[test]
@@ -3963,7 +3963,7 @@ mod tests {
         let mut staged = InferenceConfig {
             kind: SourceKind::Ollama,
             confirmed: false,
-            model: Some("qwen3.5:4b".into()),
+            model: Some("qwen3.5:2b".into()),
             host: None,
             engine: None,
         };
