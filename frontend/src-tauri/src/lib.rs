@@ -22,7 +22,7 @@ const FALLBACK_MODEL: &str = "qwen3:0.6b";
 const QWEN35_MODELS: &[(&str, f64, f64)] = &[
     ("qwen3.5:0.8b", 1.0, 4.0),
     ("qwen3.5:2b", 2.7, 6.0),
-    ("qwen3.5:2b", 3.4, 8.0),
+    ("qwen3.5:4b", 3.4, 8.0),
     ("qwen3.5:9b", 6.6, 12.0),
     ("qwen3.5:27b", 17.0, 24.0),
     ("qwen3.5:35b", 24.0, 32.0),
@@ -3656,7 +3656,7 @@ mod tests {
         // QWEN35_MODELS min_ram ladder: 4,6,8,12,24,32,96 GB
         assert_eq!(default_local_model(4.0), "qwen3.5:0.8b"); // only one fits
         assert_eq!(default_local_model(8.0), "qwen3.5:2b"); // fits 0.8/2/4 → 2nd-largest
-        assert_eq!(default_local_model(16.0), "qwen3.5:2b"); // fits ..9b → 2nd-largest
+        assert_eq!(default_local_model(16.0), "qwen3.5:4b"); // fits ..9b → 2nd-largest
         assert_eq!(default_local_model(32.0), "qwen3.5:27b"); // fits 0.8/2/4/9/27/35b → 2nd-largest is 27b
         assert_eq!(default_local_model(128.0), "qwen3.5:35b"); // fits all → 2nd-largest
     }
@@ -3690,13 +3690,13 @@ mod tests {
     fn model_names_match_treats_latest_as_optional() {
         assert!(model_names_match("llama3.2:latest", "llama3.2"));
         assert!(model_names_match("llama3.2", "llama3.2:latest"));
-        assert!(model_names_match("qwen3.5:2b", "qwen3.5:2b"));
-        assert!(!model_names_match("llama3.2:latest", "qwen3.5:2b"));
+        assert!(model_names_match("qwen3.5:4b", "qwen3.5:4b"));
+        assert!(!model_names_match("llama3.2:latest", "qwen3.5:4b"));
     }
 
     #[test]
     fn installed_model_helpers_pick_matching_or_first_model() {
-        let models = vec!["llama3.2:latest".to_string(), "qwen3.5:2b".to_string()];
+        let models = vec!["llama3.2:latest".to_string(), "qwen3.5:4b".to_string()];
         assert_eq!(
             matching_installed_model(&models, "llama3.2"),
             Some("llama3.2:latest".to_string())
@@ -3723,7 +3723,7 @@ mod tests {
     fn startup_installed_model_uses_existing_model_for_defaults() {
         let models = vec!["llama3.2:latest".to_string()];
         assert_eq!(
-            startup_installed_model("qwen3.5:2b", &models),
+            startup_installed_model("qwen3.5:4b", &models),
             Some("llama3.2:latest".to_string())
         );
     }
@@ -3732,7 +3732,7 @@ mod tests {
     fn startup_installed_model_uses_existing_model_when_configured_model_missing() {
         let models = vec!["llama3.2:latest".to_string()];
         assert_eq!(
-            startup_installed_model("qwen3.5:2b", &models),
+            startup_installed_model("qwen3.5:4b", &models),
             Some("llama3.2:latest".to_string())
         );
     }
