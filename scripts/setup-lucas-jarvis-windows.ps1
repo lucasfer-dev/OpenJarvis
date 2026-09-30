@@ -131,13 +131,19 @@ if (-not $linkReady) {
 Step "Sincronizando dependencias do OpenJarvis + desktop/voz"
 uv sync --extra desktop
 
-Step "Compilando extensao nativa openjarvis_rust"
-if (-not (Import-MsvcEnvironment)) {
-  throw "MSVC/Windows SDK nao estao prontos para compilar: link.exe, cl.exe ou kernel32.lib ausente."
+Step "Validando extensao nativa openjarvis_rust"
+$rustOk = uv run python -c "from openjarvis._rust_bridge import RUST_AVAILABLE; print(RUST_AVAILABLE)" 2>$null
+if (($rustOk | Out-String).Trim() -ne "True") {
+  Step "Compilando extensao nativa openjarvis_rust"
+  if (-not (Import-MsvcEnvironment)) {
+    throw "MSVC/Windows SDK nao estao prontos para compilar: link.exe, cl.exe ou kernel32.lib ausente."
+  }
+  uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml
+  $rustOk = uv run python -c "from openjarvis._rust_bridge import RUST_AVAILABLE; print(RUST_AVAILABLE)"
+  if (($rustOk | Out-String).Trim() -ne "True") { throw "openjarvis_rust nao ficou disponivel." }
+} else {
+  Write-Host "OK: openjarvis_rust ja instalado"
 }
-uv run maturin develop -m rust/crates/openjarvis-python/Cargo.toml
-$rustOk = uv run python -c "from openjarvis._rust_bridge import RUST_AVAILABLE; print(RUST_AVAILABLE)"
-if (($rustOk | Out-String).Trim() -ne "True") { throw "openjarvis_rust nao ficou disponivel." }
 
 Step "Garantindo Ollama e modelo local"
 try { Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 3 | Out-Null }
