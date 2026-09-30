@@ -68,6 +68,9 @@ ollama pull qwen3.5:2b
 
 Write-Host "[3/7] Validando voz..." -ForegroundColor Yellow
 uv run python -c "import sounddevice, soundfile; from openjarvis.speech._discovery import get_speech_backend; from openjarvis.core.config import load_config; assert get_speech_backend(load_config()) is not None; print('STT OK')"
+if ($LASTEXITCODE -ne 0) { throw "Speech-to-text nao ficou disponivel." }
+uv run python -c "from openjarvis.speech._tts_discovery import get_tts_backend, voice_preferences; from openjarvis.core.config import load_config; c=load_config(); p,v,s=voice_preferences(c); b=get_tts_backend(p); assert b is not None and b.health(); assert v in b.available_voices(), f'voz {v} indisponivel'; x=b.synthesize('Jarvis pronto.', voice_id=v, speed=s, output_format='wav'); assert len(x.audio)>1000; print('TTS OK:', b.backend_id, v)"
+if ($LASTEXITCODE -ne 0) { throw "Text-to-speech Kokoro/pt-BR nao ficou disponivel." }
 
 Write-Host "[4/7] Validando memoria e ferramentas..." -ForegroundColor Yellow
 uv run jarvis memory stats
@@ -107,23 +110,24 @@ $shortcut.WorkingDirectory = $root
 $shortcut.IconLocation = "$exe,0"
 $shortcut.Save()
 
-# Start the voice listener silently at login using the uv environment.
+# Start the Desktop app itself at login. It owns the warm API server and the
+# Speech UI, avoiding a second hidden Jarvis backend competing for port 8000.
 $startup = [Environment]::GetFolderPath("Startup")
-$voiceVbs = Join-Path $configDir "start-jarvis-voice.vbs"
-$voiceCmd = 'cd /d "' + $root + '" && uv run jarvis voice-assistant >> "' + (Join-Path $configDir "voice.log") + '" 2>&1'
-$vbs = 'Set WshShell = CreateObject("WScript.Shell")' + [Environment]::NewLine +
-       'WshShell.Run "cmd /c ' + ($voiceCmd -replace '"','""') + '", 0, False'
-Set-Content -Path $voiceVbs -Value $vbs -Encoding ASCII
-$auto = $ws.CreateShortcut((Join-Path $startup "Jarvis Voice.lnk"))
-$auto.TargetPath = "wscript.exe"
-$auto.Arguments = '"' + $voiceVbs + '"'
+$oldVoice = Join-Path $startup "Jarvis Voice.lnk"
+if (Test-Path $oldVoice) { Remove-Item $oldVoice -Force }
+$oldVoiceVbs = Join-Path $configDir "start-jarvis-voice.vbs"
+if (Test-Path $oldVoiceVbs) { Remove-Item $oldVoiceVbs -Force }
+$auto = $ws.CreateShortcut((Join-Path $startup "Jarvis.lnk"))
+$auto.TargetPath = $exe
+$auto.Arguments = "--hidden"
 $auto.WorkingDirectory = $root
+$auto.IconLocation = "$exe,0"
 $auto.Save()
 
 Write-Host ""
 Write-Host "JARVIS INSTALADO." -ForegroundColor Green
 Write-Host "Desktop: $exe" -ForegroundColor Green
-Write-Host "Voz: inicia automaticamente no proximo login." -ForegroundColor Green
+Write-Host "Desktop: inicia automaticamente no proximo login." -ForegroundColor Green
 Write-Host "Para testar agora: uv run jarvis voice-assistant --once" -ForegroundColor Cyan
 Write-Host "WhatsApp (uma vez): uv run jarvis channel login --channel-type whatsapp_baileys" -ForegroundColor Cyan
 Start-Process $exe
