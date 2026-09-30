@@ -345,13 +345,15 @@ def _build_tools(
                 )
             tools.append(tool_cls(backend=backend))
         elif name in _CHANNEL_TOOLS:
+            # A channel tool without a backend is unusable and encourages the
+            # model to call a tool that is guaranteed to fail.  Keep it out of
+            # the tool schema entirely until a real channel is injected.
             if channel is None:
-                logger.warning(
-                    "Tool %r was requested but no channel was injected. "
-                    "The tool will load but every call will fail with "
-                    "'No channel backend configured'.",
+                logger.debug(
+                    "Skipping channel tool %r because no channel backend is configured.",
                     name,
                 )
+                continue
             tools.append(tool_cls(channel=channel))
         elif name == "llm":
             tools.append(tool_cls(engine=engine, model=model_name))
