@@ -69,7 +69,7 @@ ollama pull qwen3.5:2b
 Write-Host "[3/7] Validando voz..." -ForegroundColor Yellow
 uv run python -c "import sounddevice, soundfile; from openjarvis.speech._discovery import get_speech_backend; from openjarvis.core.config import load_config; assert get_speech_backend(load_config()) is not None; print('STT OK')"
 if ($LASTEXITCODE -ne 0) { throw "Speech-to-text nao ficou disponivel." }
-uv run python -c "from openjarvis.speech._tts_discovery import get_tts_backend, voice_preferences; from openjarvis.core.config import load_config; c=load_config(); p,v,s=voice_preferences(c); b=get_tts_backend(p); assert b is not None and b.health(); assert v in b.available_voices(), f'voz {v} indisponivel'; x=b.synthesize('Jarvis pronto.', voice_id=v, speed=s, output_format='wav'); assert len(x.audio)>1000; print('TTS OK:', b.backend_id, v)"
+uv run python -c "from openjarvis.speech._tts_discovery import get_tts_backend, voice_preferences; from openjarvis.core.config import load_config; c=load_config(); p,v,s=voice_preferences(c); b=get_tts_backend(p); assert b is not None and b.health(); assert v in b.available_voices(), f'voz {v} indisponivel'; x=b.synthesize('Jarvis pronto.', voice_id=v, speed=s, output_format='wav'); assert len(x.audio)>1000; print('TTS OK:', b.backend_id, v, len(x.audio), 'bytes')"
 if ($LASTEXITCODE -ne 0) { throw "Text-to-speech Kokoro/pt-BR nao ficou disponivel." }
 
 Write-Host "[4/7] Validando memoria e ferramentas..." -ForegroundColor Yellow

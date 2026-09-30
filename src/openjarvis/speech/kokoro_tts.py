@@ -260,7 +260,10 @@ class KokoroTTSBackend(TTSBackend):
 
     def health(self) -> bool:
         try:
-            self._ensure_pipeline(_DEFAULT_LANG_CODE)
+            # Lucas Jarvis defaults to Brazilian Portuguese. Probe the
+            # Portuguese pipeline instead of English so Desktop health reflects
+            # the voice it will actually use (pf_dora).
+            self._ensure_pipeline(self._lang_for_voice("pf_dora"))
             return True
-        except RuntimeError:
+        except Exception:
             return False
