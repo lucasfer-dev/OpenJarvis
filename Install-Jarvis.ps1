@@ -89,8 +89,8 @@ Write-Host "====================================================" -ForegroundCol
 Write-Host " JARVIS INSTALADO E PRONTO" -ForegroundColor Green
 Write-Host "====================================================" -ForegroundColor Green
 Write-Host "Atalho: Area de Trabalho -> Jarvis"
-Write-Host "Voz: configurada para iniciar com o Windows."
-Write-Host "Modelo: qwen3.5:2b local."
+Write-Host "App: configurado para iniciar com o Windows."
+Write-Host "Modelo: qwen3.5:2b local."`nWrite-Host "Voz: faster-whisper + Kokoro pf_dora validada durante a instalacao."
 Write-Host "Dados/memoria: $HOME\.openjarvis"
 if (-not $SkipWhatsApp) {
   Write-Host ""
