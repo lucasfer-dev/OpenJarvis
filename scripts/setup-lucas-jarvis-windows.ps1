@@ -69,19 +69,26 @@ if (-not $linkReady) {
   $principal = New-Object Security.Principal.WindowsPrincipal($identity)
   $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
   if (-not $isAdmin) {
-    Write-Host "O C++ Build Tools precisa de elevacao. Abrindo uma unica janela de Administrador..."
-    $self = $PSCommandPath
-    if (-not $self) { $self = $MyInvocation.MyCommand.Path }
-    $logPath = Join-Path $env:TEMP "lucas-jarvis-setup-admin.log"
-    $skipArg = if ($SkipModel) { " -SkipModel" } else { "" }
-    $escapedSelf = $self.Replace("'","''")
-    $escapedLog = $logPath.Replace("'","''")
-    $command = "& '$escapedSelf'$skipArg *>&1 | Tee-Object -FilePath '$escapedLog'; if (`$LASTEXITCODE -ne 0) { Write-Host ''; Write-Host 'Setup falhou. Log: $escapedLog' -ForegroundColor Red; Read-Host 'Pressione ENTER para fechar' }"
-    $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
-    $p = Start-Process powershell.exe -Verb RunAs -ArgumentList @("-NoProfile","-ExecutionPolicy","Bypass","-EncodedCommand",$encoded) -Wait -PassThru
-    if ($p.ExitCode -ne 0) { throw "A etapa elevada falhou. Log salvo em $logPath" }
-    exit 0
-  }
+    Write-Host "O C++ Build Tools precisa de elevacao. Instalando apenas essa dependencia como Administrador..."
+    $bootstrapper = Join-Path $env:TEMP "vs_buildtools.exe"
+    Invoke-WebRequest -UseBasicParsing -Uri "https://aka.ms/vs/17/release/vs_buildtools.exe" -OutFile $bootstrapper
+    $installPath = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\\2022\\BuildTools"
+    $adminArgs = @(
+      "--quiet", "--wait", "--norestart", "--nocache",
+      "--installPath", "`"$installPath`"",
+      "--add", "Microsoft.VisualStudio.Workload.VCTools",
+      "--includeRecommended"
+    )
+    $p = Start-Process -FilePath $bootstrapper -Verb RunAs -ArgumentList $adminArgs -Wait -PassThru
+    if ($p.ExitCode -notin @(0,3010)) {
+      throw "Visual Studio Build Tools falhou com codigo $($p.ExitCode). Logs do instalador: $env:TEMP\\dd_*"
+    }
+    if ($p.ExitCode -eq 3010) { Write-Warning "Build Tools instalado; o Windows recomenda reinicializacao." }
+    $linkReady = Import-MsvcEnvironment
+    if (-not $linkReady) {
+      throw "Build Tools foi executado, mas link.exe ainda nao foi localizado. Reinicie o Windows e rode o setup novamente."
+    }
+  } else {
 
   $bootstrapper = Join-Path $env:TEMP "vs_buildtools.exe"
   Write-Host "Baixando bootstrapper oficial do Visual Studio Build Tools..."
@@ -99,6 +106,7 @@ if (-not $linkReady) {
   }
   if ($p.ExitCode -eq 3010) { Write-Warning "Build Tools instalado; o Windows recomenda reinicializacao." }
   $linkReady = Import-MsvcEnvironment
+  }
 }
 if (-not $linkReady) {
   throw "Build Tools terminou, mas link.exe nao foi localizado. Reinicie o Windows e execute este setup novamente."
