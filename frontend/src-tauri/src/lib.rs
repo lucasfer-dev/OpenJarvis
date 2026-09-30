@@ -2874,6 +2874,54 @@ fn normalize_host(raw: &str) -> String {
     s.trim_end_matches('/').to_string()
 }
 
+/// Check TTS backend health through the native desktop bridge.
+/// This avoids WebView networking/CORS differences for localhost requests.
+#[tauri::command]
+async fn tts_health(api_url: String) -> Result<serde_json::Value, String> {
+    let base = if api_url.is_empty() { api_base() } else { api_url };
+    let resp = reqwest::get(format!("{}/v1/speech/tts/health", base))
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| format!("Invalid response: {}", e))?;
+    if !status.is_success() {
+        return Err(format!("TTS health failed ({}): {}", status.as_u16(), body));
+    }
+    serde_json::from_str(&body).map_err(|e| format!("Invalid response: {}", e))
+}
+
+/// Synthesize speech through the native desktop bridge and return WAV bytes.
+#[tauri::command]
+async fn synthesize_speech(
+    api_url: String,
+    text: String,
+    voice_id: Option<String>,
+    speed: Option<f64>,
+) -> Result<Vec<u8>, String> {
+    let base = if api_url.is_empty() { api_base() } else { api_url };
+    let payload = serde_json::json!({
+        "text": text,
+        "voice_id": voice_id,
+        "speed": speed,
+    });
+    let resp = reqwest::Client::new()
+        .post(format!("{}/v1/speech/synthesize", base))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+    let status = resp.status();
+    let bytes = resp.bytes().await.map_err(|e| format!("Invalid audio response: {}", e))?;
+    if !status.is_success() {
+        return Err(format!(
+            "Speech synthesis failed ({}): {}",
+            status.as_u16(),
+            String::from_utf8_lossy(&bytes)
+        ));
+    }
+    Ok(bytes.to_vec())
+}
+
 /// Check speech backend health.
 #[tauri::command]
 async fn speech_health(api_url: String) -> Result<serde_json::Value, String> {
@@ -3424,6 +3472,8 @@ pub fn run() {
             submit_savings,
             transcribe_audio,
             speech_health,
+            tts_health,
+            synthesize_speech,
             pull_ollama_model,
             delete_ollama_model,
             save_cloud_key,
