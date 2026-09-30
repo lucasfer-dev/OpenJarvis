@@ -83,6 +83,8 @@ class WhatsAppBaileysChannel(BaseChannel):
         self._stop_event = threading.Event()
         self._runtime_dir = _DEFAULT_RUNTIME_DIR
         self._last_qr: str = ""
+        self._connected_event = threading.Event()
+        self._qr_event = threading.Event()
 
     # -- bridge lifecycle -------------------------------------------------------
 
@@ -160,6 +162,8 @@ class WhatsAppBaileysChannel(BaseChannel):
 
         try:
             self._stop_event.clear()
+            self._connected_event.clear()
+            self._qr_event.clear()
             self._process = subprocess.Popen(
                 ["node", str(bridge_js), "--auth-dir", auth],
                 stdin=subprocess.PIPE,
@@ -180,6 +184,17 @@ class WhatsAppBaileysChannel(BaseChannel):
         except Exception:
             logger.exception("Failed to start bridge subprocess")
             self._status = ChannelStatus.ERROR
+
+    def wait_until_ready(self, timeout: float = 60.0) -> bool:
+        """Wait until WhatsApp is connected, or until *timeout* expires."""
+        return self._connected_event.wait(timeout=max(0.0, timeout))
+
+    def wait_for_qr(self, timeout: float = 20.0) -> str:
+        """Wait for and return the current QR payload for first-time authentication."""
+        if self._last_qr:
+            return self._last_qr
+        self._qr_event.wait(timeout=max(0.0, timeout))
+        return self._last_qr
 
     def disconnect(self) -> None:
         """Send disconnect command to the bridge and terminate the subprocess."""
@@ -289,12 +304,14 @@ class WhatsAppBaileysChannel(BaseChannel):
             new_status = event.get("status", "")
             if new_status == "connected":
                 self._status = ChannelStatus.CONNECTED
+                self._connected_event.set()
                 logger.info("WhatsApp Baileys bridge connected")
             elif new_status == "disconnected":
                 self._status = ChannelStatus.DISCONNECTED
 
         elif event_type == "qr":
             self._last_qr = event.get("data", "")
+            self._qr_event.set()
             logger.info("WhatsApp QR code received -- scan to authenticate")
 
         elif event_type == "message":

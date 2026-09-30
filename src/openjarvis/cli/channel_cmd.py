@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
+import time
 
 import click
 from rich.console import Console
@@ -198,6 +199,25 @@ def channel_list(
     console.print(table)
 
 
+def _connect_for_cli(ch: Any, console: Console, timeout: float = 60.0) -> bool:
+    """Connect a stateful channel before a one-shot CLI operation."""
+    try:
+        ch.connect()
+        waiter = getattr(ch, "wait_until_ready", None)
+        if callable(waiter):
+            if waiter(timeout):
+                return True
+            qr_getter = getattr(ch, "wait_for_qr", None)
+            qr = qr_getter(0) if callable(qr_getter) else ""
+            if qr:
+                console.print("[yellow]WhatsApp precisa ser autenticado primeiro. Rode: jarvis channel login --channel-type whatsapp_baileys[/yellow]")
+            return False
+        return getattr(ch.status(), "value", "") == "connected"
+    except Exception as exc:
+        console.print(f"[red]Falha ao conectar canal: {exc}[/red]")
+        return False
+
+
 @channel.command("send")
 @click.argument("target")
 @click.argument("message")
@@ -223,7 +243,18 @@ def channel_send(
         console.print(f"[red]{exc.message}[/red]")
         return
 
+    connected_here = False
+    if getattr(ch.status(), "value", "") != "connected":
+        connected_here = _connect_for_cli(ch, console)
+        if not connected_here:
+            return
     ok = ch.send(target, message)
+    if connected_here:
+        time.sleep(0.5)
+        try:
+            ch.disconnect()
+        except Exception:
+            pass
     if ok:
         console.print(f"[green]Message sent to {target}[/green]")
     else:
@@ -264,3 +295,48 @@ def channel_status(
     key = channel_type or config.channel.default_channel or "unknown"
     console.print(f"Channel: [cyan]{key}[/cyan]")
     console.print(f"Status: [{color}]{st.value}[/{color}]")
+
+
+@channel.command("login")
+@click.option("--channel-type", default="whatsapp_baileys", help=_CHANNEL_TYPE_HELP)
+@click.option("--timeout", default=120, type=int, show_default=True)
+def channel_login(channel_type: str, timeout: int) -> None:
+    """Authenticate a stateful messaging channel and persist its session."""
+    console = Console()
+    from openjarvis.core.config import load_config
+
+    ch = _get_channel(channel_type, load_config())
+    if channel_type != "whatsapp_baileys":
+        raise click.ClickException("login interativo esta disponivel para whatsapp_baileys.")
+
+    ch.connect()
+    try:
+        # Existing sessions may connect immediately.
+        if ch.wait_until_ready(3):
+            console.print("[green]WhatsApp ja esta autenticado e conectado.[/green]")
+            return
+
+        qr = ch.wait_for_qr(20)
+        if qr:
+            try:
+                import qrcode
+                qr_obj = qrcode.QRCode(border=1)
+                qr_obj.add_data(qr)
+                qr_obj.make(fit=True)
+                qr_obj.print_ascii(invert=True)
+            except ImportError:
+                console.print("[yellow]Instale qrcode para renderizar o QR no terminal.[/yellow]")
+                console.print(qr)
+            console.print("[cyan]No celular: WhatsApp > Aparelhos conectados > Conectar aparelho. Escaneie o QR acima.[/cyan]")
+        else:
+            console.print("[yellow]Ainda aguardando o WhatsApp gerar o QR...[/yellow]")
+
+        if ch.wait_until_ready(max(1, timeout)):
+            console.print("[bold green]WhatsApp conectado. A sessao ficou salva; nao precisa escanear novamente normalmente.[/bold green]")
+        else:
+            raise click.ClickException("Tempo esgotado esperando a autenticacao do WhatsApp.")
+    finally:
+        try:
+            ch.disconnect()
+        except Exception:
+            pass
