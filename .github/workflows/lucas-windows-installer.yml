@@ -1,0 +1,54 @@
+name: Lucas Jarvis Windows Installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Download bundled Ollama
+        shell: bash
+        run: |
+          cd frontend/src-tauri/scripts
+          ./download-ollama.sh x86_64-pc-windows-msvc
+
+      - name: Build Windows bundles
+        working-directory: frontend
+        env:
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run tauri build
+
+      - name: Collect installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          Get-ChildItem frontend/src-tauri/target/release/bundle -Recurse -File |
+            Where-Object { $_.Extension -in ".exe",".msi" } |
+            Copy-Item -Destination artifacts
+          Get-ChildItem artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lucas-Jarvis-Windows-Installer
+          path: artifacts/*
+          if-no-files-found: error
