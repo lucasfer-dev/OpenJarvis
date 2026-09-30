@@ -199,14 +199,6 @@ def channel_list(
     console.print(table)
 
 
-@channel.command("send")
-@click.argument("target")
-@click.argument("message")
-@click.option(
-    "--channel-type",
-    default=None,
-    help=_CHANNEL_TYPE_HELP,
-)
 def _connect_for_cli(ch: Any, console: Console, timeout: float = 60.0) -> bool:
     """Connect a stateful channel before a one-shot CLI operation."""
     try:
@@ -226,6 +218,14 @@ def _connect_for_cli(ch: Any, console: Console, timeout: float = 60.0) -> bool:
         return False
 
 
+@channel.command("send")
+@click.argument("target")
+@click.argument("message")
+@click.option(
+    "--channel-type",
+    default=None,
+    help=_CHANNEL_TYPE_HELP,
+)
 def channel_send(
     target: str,
     message: str,
