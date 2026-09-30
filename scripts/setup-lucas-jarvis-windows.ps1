@@ -43,34 +43,54 @@ Write-Host $rustVersion
 
 Step "Garantindo Microsoft C++ Build Tools para o Rust"
 $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\\Installer\\vswhere.exe"
-$linkFound = Get-Command link.exe -ErrorAction SilentlyContinue
-if (-not $linkFound) {
-  $hasCppTools = $false
-  if (Test-Path $vswhere) {
-    $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if ($installPath) { $hasCppTools = $true }
+
+function Import-MsvcEnvironment {
+  if (-not (Test-Path $vswhere)) { return $false }
+  $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+  if (-not $installPath) { return $false }
+  $devCmd = Join-Path $installPath "Common7\\Tools\\VsDevCmd.bat"
+  if (-not (Test-Path $devCmd)) { return $false }
+  $envDump = cmd /s /c "`"`"$devCmd`" -arch=x64 -host_arch=x64 >nul && set`""
+  foreach ($line in $envDump) {
+    if ($line -match "^([^=]+)=(.*)$") { Set-Item -Path "Env:$($matches[1])" -Value $matches[2] }
   }
-  if (-not $hasCppTools) {
-    Write-Host "Instalando Visual Studio Build Tools (C++). Pode abrir uma janela/UAC."
-    winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" --accept-package-agreements --accept-source-agreements
-  } else { Write-Host "OK: Visual C++ Build Tools ja instalado" }
+  return [bool](Get-Command link.exe -ErrorAction SilentlyContinue)
 }
 
-# Carrega o ambiente MSVC no processo atual para que Cargo encontre link.exe.
-if (Test-Path $vswhere) {
-  $installPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-  if ($installPath) {
-    $devCmd = Join-Path $installPath "Common7\\Tools\\VsDevCmd.bat"
-    if (Test-Path $devCmd) {
-      $envDump = cmd /s /c "`"`"$devCmd`" -arch=x64 -host_arch=x64 >nul && set`""
-      foreach ($line in $envDump) {
-        if ($line -match "^([^=]+)=(.*)$") { Set-Item -Path "Env:$($matches[1])" -Value $matches[2] }
-      }
-    }
+$linkReady = Import-MsvcEnvironment
+if (-not $linkReady) {
+  # Microsoft's CLI install examples require elevation. Relaunch this setup as Administrator once.
+  $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+  $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+  $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+  if (-not $isAdmin) {
+    Write-Host "O C++ Build Tools precisa de elevacao. Abrindo uma unica janela de Administrador..."
+    $self = $MyInvocation.MyCommand.Path
+    $args = "-NoProfile -ExecutionPolicy Bypass -File `"$self`""
+    if ($SkipModel) { $args += " -SkipModel" }
+    Start-Process powershell.exe -Verb RunAs -ArgumentList $args -Wait
+    exit $LASTEXITCODE
   }
+
+  $bootstrapper = Join-Path $env:TEMP "vs_buildtools.exe"
+  Write-Host "Baixando bootstrapper oficial do Visual Studio Build Tools..."
+  Invoke-WebRequest -UseBasicParsing -Uri "https://aka.ms/vs/17/release/vs_buildtools.exe" -OutFile $bootstrapper
+  $installPath = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\\2022\\BuildTools"
+  $vsArgs = @(
+    "--quiet", "--wait", "--norestart", "--nocache",
+    "--installPath", "`"$installPath`"",
+    "--add", "Microsoft.VisualStudio.Workload.VCTools",
+    "--includeRecommended"
+  )
+  $p = Start-Process -FilePath $bootstrapper -ArgumentList $vsArgs -Wait -PassThru
+  if ($p.ExitCode -notin @(0,3010)) {
+    throw "Visual Studio Build Tools falhou com codigo $($p.ExitCode). Abra Visual Studio Installer e verifique logs em %TEMP%\\dd_*."
+  }
+  if ($p.ExitCode -eq 3010) { Write-Warning "Build Tools instalado; o Windows recomenda reinicializacao." }
+  $linkReady = Import-MsvcEnvironment
 }
-if (-not (Get-Command link.exe -ErrorAction SilentlyContinue)) {
-  throw "Microsoft C++ linker (link.exe) ainda nao esta disponivel. Reinicie o PowerShell e execute o setup novamente."
+if (-not $linkReady) {
+  throw "Build Tools terminou, mas link.exe nao foi localizado. Reinicie o Windows e execute este setup novamente."
 }
 
 Step "Sincronizando dependencias do OpenJarvis + desktop/voz"
