@@ -301,6 +301,41 @@ _MEMORY_TOOLS = frozenset(
 _CHANNEL_TOOLS = frozenset({"channel_send", "channel_list", "channel_status"})
 
 
+def _capture_explicit_memory(query_text: str, config) -> bool:
+    """Deterministically persist explicit Portuguese/English remember requests.
+
+    Small local models are not perfectly reliable at deciding to call
+    memory_store.  When the user explicitly says "lembre/guarde/memorize",
+    persistence should not depend on model tool-selection quality.
+    """
+    import re
+
+    text = (query_text or "").strip()
+    patterns = (
+        r"^(?:jarvis[,:]?\s*)?(?:lembre|lembra|guarde|memorize)(?:-se)?(?:\s+de)?(?:\s+que)?\s+(.+)$",
+        r"^(?:jarvis[,:]?\s*)?remember(?:\s+that)?\s+(.+)$",
+    )
+    payload = ""
+    for pattern in patterns:
+        match = re.match(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            payload = match.group(1).strip()
+            break
+    if not payload:
+        return False
+
+    backend = _get_memory_backend(config)
+    if backend is None:
+        return False
+    try:
+        backend.store(payload, source="explicit-user-memory")
+        logger.debug("Stored explicit user memory deterministically")
+        return True
+    except Exception as exc:
+        logger.warning("Failed to store explicit user memory: %s", exc)
+        return False
+
+
 def _build_tools(
     tool_names: list[str],
     config,
@@ -1084,6 +1119,11 @@ def ask(
             max_tokens,
             model_name,
         )
+
+    # Explicit "remember this" requests are persisted before inference so
+    # recall does not depend on a small model choosing memory_store correctly.
+    if not no_context:
+        _capture_explicit_memory(query_text, config)
 
     # Agent mode (treat empty-string `--agent ""` as explicit opt-out)
     if agent_name:
