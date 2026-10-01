@@ -2927,15 +2927,20 @@ async fn synthesize_speech(
 /// Check speech backend health.
 #[tauri::command]
 async fn speech_health(api_url: String) -> Result<serde_json::Value, String> {
-    let url = format!("{}/v1/speech/health", api_url);
-    let resp = reqwest::get(&url)
+    let base = if api_url.is_empty() { api_base() } else { api_url };
+    let resp = reqwest::get(format!("{}/v1/speech/health", base.trim_end_matches('/')))
         .await
         .map_err(|e| format!("Connection failed: {}", e))?;
-    let body: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Invalid response: {}", e))?;
-    Ok(body)
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| format!("Invalid response: {}", e))?;
+    if !status.is_success() {
+        return Err(format!(
+            "Speech health failed ({}): {}",
+            status.as_u16(),
+            body
+        ));
+    }
+    serde_json::from_str(&body).map_err(|e| format!("Invalid response: {}", e))
 }
 
 // ---------------------------------------------------------------------------
