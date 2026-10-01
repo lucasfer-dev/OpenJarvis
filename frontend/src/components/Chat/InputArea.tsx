@@ -1,9 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Send, Square, Paperclip, Search } from 'lucide-react';
+import { Send, Square, Paperclip, Search, AudioLines } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAppStore, generateId } from '../../lib/store';
 import { streamChat, streamResearch } from '../../lib/sse';
-import { fetchSavings, getBase } from '../../lib/api';
+import {
+  fetchSavings,
+  getBase,
+  getVoiceModeStatus,
+  startVoiceMode,
+  stopVoiceMode,
+  isTauri,
+} from '../../lib/api';
 import { listConnectors, getSyncStatus } from '../../lib/connectors-api';
 import { serializeToolCallArguments } from '../../lib/tool-call';
 import {
@@ -81,6 +88,8 @@ function useResearchCorpusSync(enabled: boolean): {
 
 export function InputArea() {
   const [input, setInput] = useState('');
+  const [voiceModeActive, setVoiceModeActive] = useState(false);
+  const [voiceModeBusy, setVoiceModeBusy] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -102,6 +111,43 @@ export function InputArea() {
   const setDeepResearch = useAppStore((s) => s.setDeepResearch);
   const corpusSync = useResearchCorpusSync(deepResearch);
   const isCurrentChatStreaming = streamState.isStreaming && streamState.conversationId === activeId;
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+
+    const refreshVoiceMode = async () => {
+      try {
+        const status = await getVoiceModeStatus();
+        if (!cancelled) setVoiceModeActive(status.active);
+      } catch {
+        if (!cancelled) setVoiceModeActive(false);
+      }
+    };
+
+    void refreshVoiceMode();
+    const interval = window.setInterval(() => { void refreshVoiceMode(); }, 2500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const toggleVoiceMode = useCallback(async () => {
+    if (!isTauri() || voiceModeBusy) return;
+    setVoiceModeBusy(true);
+    try {
+      const status = voiceModeActive
+        ? await stopVoiceMode()
+        : await startVoiceMode('jarvis');
+      setVoiceModeActive(status.active);
+      toast.success(status.active ? 'Voice Mode active — say “Jarvis” followed by a command.' : 'Voice Mode stopped.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err), { duration: 8000 });
+    } finally {
+      setVoiceModeBusy(false);
+    }
+  }, [voiceModeActive, voiceModeBusy]);
 
   const {
     state: speechState,
@@ -565,6 +611,24 @@ export function InputArea() {
     <div className="px-4 pb-4 pt-2" style={{ maxWidth: 'var(--chat-max-width)', margin: '0 auto', width: '100%' }}>
       <div className="mb-2 flex flex-col gap-1">
         <div className="flex items-center gap-2">
+          {isTauri() && (
+            <button
+              type="button"
+              onClick={() => { void toggleVoiceMode(); }}
+              disabled={voiceModeBusy}
+              aria-pressed={voiceModeActive}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+              style={{
+                background: voiceModeActive ? 'var(--color-accent-subtle)' : 'transparent',
+                border: `1px solid ${voiceModeActive ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                color: voiceModeActive ? 'var(--color-accent)' : 'var(--color-text-tertiary)',
+              }}
+              title={voiceModeActive ? 'Voice Mode is listening for “Jarvis”' : 'Start continuous Voice Mode'}
+            >
+              <AudioLines size={12} />
+              {voiceModeBusy ? 'Starting...' : voiceModeActive ? 'Voice Mode On' : 'Voice Mode'}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setDeepResearch(!deepResearch)}
