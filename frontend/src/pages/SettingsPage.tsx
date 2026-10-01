@@ -861,7 +861,7 @@ export function SettingsPage() {
                 <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                   {ttsBackend === null ? 'Checking...'
                     : ttsBackend.available ? `${ttsBackend.backend}${ttsBackend.voice_id ? ` / ${ttsBackend.voice_id}` : ''}`
-                    : 'Not configured'}
+                    : 'Unavailable'}
                 </span>
               </div>
             </SettingRow>
