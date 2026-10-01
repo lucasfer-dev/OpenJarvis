@@ -1786,7 +1786,11 @@ async fn start_backend(
 }
 
 #[tauri::command]
-async fn stop_backend(backend: tauri::State<'_, SharedBackend>) -> Result<(), String> {
+async fn stop_backend(
+    backend: tauri::State<'_, SharedBackend>,
+    voice_mode: tauri::State<'_, SharedVoiceMode>,
+) -> Result<(), String> {
+    voice_mode.lock().await.stop().await;
     backend.lock().await.stop_all().await;
     Ok(())
 }
@@ -1797,7 +1801,9 @@ async fn stop_backend(backend: tauri::State<'_, SharedBackend>) -> Result<(), St
 async fn reset_inference_source(
     backend: tauri::State<'_, SharedBackend>,
     status: tauri::State<'_, SharedStatus>,
+    voice_mode: tauri::State<'_, SharedVoiceMode>,
 ) -> Result<(), String> {
+    voice_mode.lock().await.stop().await;
     backend.lock().await.stop_all().await;
     discard_pending_inference_setup()?;
     *status.lock().await = SetupStatus::default();
