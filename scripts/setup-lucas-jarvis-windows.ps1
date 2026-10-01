@@ -129,7 +129,7 @@ if (-not $linkReady) {
 }
 
 Step "Sincronizando dependencias do OpenJarvis + desktop/voz"
-uv sync --extra desktop
+uv sync --extra desktop --extra voice --group desktop-native
 
 Step "Validando extensao nativa openjarvis_rust"
 $rustOk = uv run python -c "from openjarvis._rust_bridge import RUST_AVAILABLE; print(RUST_AVAILABLE)" 2>$null
