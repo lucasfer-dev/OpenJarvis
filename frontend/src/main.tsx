@@ -24,6 +24,21 @@ function applyTheme() {
 
 applyTheme();
 
+// Desktop assets are bundled with the executable. Remove PWA registrations
+// left by older builds so WebView2 cannot keep serving an obsolete frontend.
+if (isTauri()) {
+  if ('serviceWorker' in navigator) {
+    void navigator.serviceWorker.getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .catch(() => {});
+  }
+  if ('caches' in window) {
+    void caches.keys()
+      .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+      .catch(() => {});
+  }
+}
+
 // Fetch the API base URL from the Tauri backend before rendering.
 // This ensures JARVIS_PORT is defined in one place (the Rust backend).
 // In non-Tauri environments this is a no-op.

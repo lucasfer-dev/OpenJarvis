@@ -13,6 +13,12 @@ const apiTarget = process.env.OPENJARVIS_VITE_PROXY_TARGET
   || process.env.VITE_API_URL
   || 'http://localhost:8000';
 
+// The desktop app ships its frontend inside the Tauri binary. A PWA service
+// worker can keep serving an older cached UI after the executable is rebuilt,
+// which is especially confusing for native-only features such as Voice Mode.
+// Keep PWA caching for the browser build, never for Tauri.
+const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM);
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -22,7 +28,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    VitePWA({
+    ...(!isTauriBuild ? [VitePWA({
       registerType: 'autoUpdate',
       manifest: {
         name: 'OpenJarvis',
@@ -40,7 +46,7 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         navigateFallbackDenylist: [/^\/v1\//, /^\/health/, /^\/dashboard/, /^\/api\//],
       },
-    }),
+    })] : []),
   ],
   build: {
     outDir: '../src/openjarvis/server/static',
