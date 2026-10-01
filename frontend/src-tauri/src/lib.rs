@@ -1492,6 +1492,8 @@ async fn boot_backend(backend: SharedBackend, status: SharedStatus) {
             "--extra",
             "desktop",
             "--extra",
+            "voice",
+            "--extra",
             "inference-cloud",
             "--extra",
             "inference-google",
