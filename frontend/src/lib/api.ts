@@ -442,8 +442,9 @@ export async function fetchTtsHealth(): Promise<TtsHealth> {
   if (isTauri()) {
     try {
       return await tauriInvoke<TtsHealth>('tts_health');
-    } catch {
-      return { available: false };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      return { available: false, reason: reason || 'TTS health check failed' };
     }
   }
   const res = await apiFetch(`/v1/speech/tts/health`, { cache: 'no-store' });
@@ -455,8 +456,9 @@ export async function fetchSpeechHealth(): Promise<SpeechHealth> {
   if (isTauri()) {
     try {
       return await tauriInvoke<SpeechHealth>('speech_health');
-    } catch {
-      return { available: false };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      return { available: false, reason: reason || 'Speech health check failed' };
     }
   }
   const res = await apiFetch(`/v1/speech/health`);
