@@ -192,6 +192,16 @@ enabled = "code_interpreter,web_search,file_read,file_write,apply_patch,shell_ex
 
 [security]
 profile = "personal"
+
+[speech]
+backend = "faster-whisper"
+model = "base"
+language = "pt"
+device = "cpu"
+compute_type = "int8"
+tts_backend = "kokoro"
+voice_id = "pf_dora"
+voice_speed = 1.0
 '@
 [System.IO.File]::WriteAllText($configPath, $configText, (New-Object System.Text.UTF8Encoding($false)))
 uv run python -c "from openjarvis.core.config import load_config; load_config(); print('config OK')"
