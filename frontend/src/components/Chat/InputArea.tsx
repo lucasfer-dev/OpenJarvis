@@ -9,6 +9,8 @@ import {
   getVoiceModeStatus,
   startVoiceMode,
   stopVoiceMode,
+  fetchSpeechHealth,
+  fetchTtsHealth,
   isTauri,
 } from '../../lib/api';
 import { listConnectors, getSyncStatus } from '../../lib/connectors-api';
@@ -137,9 +139,19 @@ export function InputArea() {
     if (!isTauri() || voiceModeBusy) return;
     setVoiceModeBusy(true);
     try {
-      const status = voiceModeActive
-        ? await stopVoiceMode()
-        : await startVoiceMode('jarvis');
+      let status;
+      if (voiceModeActive) {
+        status = await stopVoiceMode();
+      } else {
+        const [speech, tts] = await Promise.all([fetchSpeechHealth(), fetchTtsHealth()]);
+        if (!speech.available) {
+          throw new Error(speech.reason || 'Speech-to-text backend is unavailable.');
+        }
+        if (!tts.available) {
+          throw new Error(tts.reason || 'Text-to-speech backend is unavailable.');
+        }
+        status = await startVoiceMode('jarvis');
+      }
       setVoiceModeActive(status.active);
       toast.success(status.active ? 'Voice Mode active — say “Jarvis” followed by a command.' : 'Voice Mode stopped.');
     } catch (err) {
