@@ -8,10 +8,11 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-import urllib.error
-import urllib.request
 import sys
 import time
+import urllib.error
+import urllib.request
+
 import click
 from rich.console import Console
 
@@ -30,9 +31,12 @@ def _extract_command(text: str, wake_word: str) -> str | None:
 
 def _run_via_server(command: str) -> str | None:
     """Use the already-running Desktop API to avoid a Python cold start per phrase."""
+    from openjarvis.core.config import load_config
+
+    model = load_config().intelligence.default_model
     payload = json.dumps(
         {
-            "model": "qwen3.5:2b",
+            "model": model,
             "messages": [{"role": "user", "content": command}],
             "stream": False,
         }
@@ -47,7 +51,14 @@ def _run_via_server(command: str) -> str | None:
         with urllib.request.urlopen(request, timeout=120) as response:
             body = json.loads(response.read().decode("utf-8"))
         return body["choices"][0]["message"]["content"].strip()
-    except (OSError, KeyError, IndexError, TypeError, ValueError, urllib.error.URLError):
+    except (
+        OSError,
+        KeyError,
+        IndexError,
+        TypeError,
+        ValueError,
+        urllib.error.URLError,
+    ):
         return None
 
 
@@ -84,7 +95,9 @@ def voice_assistant(wake_word: str, once: bool) -> None:
 
     # Warm STT/TTS discovery before the loop. Model loading remains cached.
     if session.get_stt_backend() is None:
-        raise click.ClickException("Nenhum backend de reconhecimento de voz disponivel.")
+        raise click.ClickException(
+            "Nenhum backend de reconhecimento de voz disponivel."
+        )
 
     while True:
         try:
@@ -94,12 +107,20 @@ def voice_assistant(wake_word: str, once: bool) -> None:
                 continue
             command = _extract_command(heard, wake_word)
             if command is None:
-                console.print("[dim]Ignorado: a fala nao comecou com a palavra de ativacao.[/dim]")
+                console.print(
+                    "[dim]Ignorado: a fala nao comecou com a palavra "
+                    "de ativacao.[/dim]"
+                )
                 continue
             if not command:
                 speak("Sim?", console, session)
                 continue
-            if command.casefold() in {"sair", "encerrar", "desligar jarvis", "tchau jarvis"}:
+            if command.casefold() in {
+                "sair",
+                "encerrar",
+                "desligar jarvis",
+                "tchau jarvis",
+            }:
                 speak("Ate mais.", console, session)
                 return
 

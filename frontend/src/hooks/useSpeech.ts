@@ -11,11 +11,29 @@ export function useSpeech() {
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Check if speech backend is available on mount
+  // Speech models may finish loading after the UI mounts. Re-probe so the
+  // microphone becomes available without requiring an app restart.
   useEffect(() => {
-    fetchSpeechHealth()
-      .then((health) => setAvailable(health.available))
-      .catch(() => setAvailable(false));
+    let cancelled = false;
+
+    const refresh = () => {
+      fetchSpeechHealth()
+        .then((health) => {
+          if (!cancelled) setAvailable(health.available);
+        })
+        .catch(() => {
+          if (!cancelled) setAvailable(false);
+        });
+    };
+
+    refresh();
+    const interval = window.setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+    };
   }, []);
 
   const startRecording = useCallback(async (): Promise<void> => {

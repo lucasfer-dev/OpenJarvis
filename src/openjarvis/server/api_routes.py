@@ -990,10 +990,49 @@ async def learning_policy(request: Request):
 speech_router = APIRouter(prefix="/v1/speech", tags=["speech"])
 
 
+async def _resolve_speech_backend(request: Request):
+    """Return a healthy STT backend, retrying discovery after startup failures.
+
+    Desktop can become ready before heavy speech dependencies have finished
+    loading.  Keep one shared discovery task so concurrent health probes do not
+    load Whisper more than once, but do not cache an unavailable result: a
+    later request should be able to recover without restarting the server.
+    """
+    app = request.app
+    backend = getattr(app.state, "speech_backend", None)
+    if backend is not None:
+        return backend
+
+    config = getattr(app.state, "config", None)
+    if config is None:
+        return None
+
+    task = getattr(app.state, "speech_resolution_task", None)
+    if task is None:
+
+        def discover():
+            from openjarvis.speech._discovery import get_speech_backend
+
+            return get_speech_backend(config)
+
+        task = asyncio.create_task(asyncio.to_thread(discover))
+        app.state.speech_resolution_task = task
+
+    try:
+        backend = await asyncio.shield(task)
+    finally:
+        if task.done() and getattr(app.state, "speech_resolution_task", None) is task:
+            app.state.speech_resolution_task = None
+
+    if backend is not None:
+        app.state.speech_backend = backend
+    return backend
+
+
 @speech_router.post("/transcribe")
 async def transcribe_speech(request: Request):
     """Transcribe uploaded audio to text."""
-    backend = getattr(request.app.state, "speech_backend", None)
+    backend = await _resolve_speech_backend(request)
     if backend is None:
         raise HTTPException(status_code=501, detail="Speech backend not configured")
 
@@ -1034,7 +1073,7 @@ async def transcribe_speech(request: Request):
 @speech_router.get("/health")
 async def speech_health(request: Request):
     """Check if a speech backend is available."""
-    backend = getattr(request.app.state, "speech_backend", None)
+    backend = await _resolve_speech_backend(request)
     if backend is None:
         return {"available": False, "reason": "No speech backend configured"}
     try:
@@ -1049,6 +1088,12 @@ async def speech_health(request: Request):
         last_error = getattr(backend, "last_error", None)
         if callable(last_error):
             reason = last_error()
+
+    # A backend can become unhealthy after startup (missing runtime DLL,
+    # device change, etc.).  Drop it so the next probe can rediscover a
+    # healthy backend instead of leaving Desktop stuck until restart.
+    if not available:
+        request.app.state.speech_backend = None
 
     return {
         "available": available,
