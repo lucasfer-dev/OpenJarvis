@@ -97,6 +97,25 @@ if ($desktopProcesses) {
   $desktopProcesses | Stop-Process -Force
   Start-Sleep -Seconds 2
 }
+
+# Older Desktop builds registered the Vite PWA service worker inside WebView2.
+# That cache can keep serving an obsolete UI even after a successful Tauri
+# rebuild. Remove only transient WebView2 cache/service-worker data; preserve
+# Local Storage, IndexedDB and the user's conversations/settings.
+$webViewRoot = Join-Path $env:LOCALAPPDATA "com.openjarvis.desktop\EBWebView"
+$staleWebViewPaths = @(
+  (Join-Path $webViewRoot "Default\Service Worker"),
+  (Join-Path $webViewRoot "Service Worker"),
+  (Join-Path $webViewRoot "Default\Cache"),
+  (Join-Path $webViewRoot "Default\Code Cache")
+)
+foreach ($stalePath in $staleWebViewPaths) {
+  if (Test-Path $stalePath) {
+    Write-Host "Limpando cache antigo do Desktop: $stalePath" -ForegroundColor DarkGray
+    Remove-Item $stalePath -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 & npm.cmd run tauri build
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "Falha ao compilar o Desktop Tauri." }
 Pop-Location
