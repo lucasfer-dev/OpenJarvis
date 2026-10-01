@@ -291,8 +291,8 @@ export function SettingsPage() {
   const conversations = useAppStore((s) => s.conversations);
   const serverInfo = useAppStore((s) => s.serverInfo);
   const [healthy, setHealthy] = useState<boolean | null>(null);
-  const [speechBackendAvailable, setSpeechBackendAvailable] = useState<boolean | null>(null);
-  const [ttsBackend, setTtsBackend] = useState<{ available: boolean; backend?: string; voice_id?: string } | null>(null);
+  const [speechBackend, setSpeechBackend] = useState<{ available: boolean; backend?: string; reason?: string } | null>(null);
+  const [ttsBackend, setTtsBackend] = useState<{ available: boolean; backend?: string; voice_id?: string; reason?: string } | null>(null);
   const [saved, setSaved] = useState(false);
 
   const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(() => !isAutoUpdateDisabled());
@@ -392,14 +392,26 @@ export function SettingsPage() {
   }, [refreshMemoryStatus, settings.apiUrl]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const refreshVoiceHealth = async () => {
+      const [speech, tts] = await Promise.all([fetchSpeechHealth(), fetchTtsHealth()]);
+      if (!cancelled) {
+        setSpeechBackend(speech);
+        setTtsBackend(tts);
+      }
+    };
+
     checkHealth().then(setHealthy);
-    fetchSpeechHealth()
-      .then((h) => setSpeechBackendAvailable(h.available))
-      .catch(() => setSpeechBackendAvailable(false));
-    fetchTtsHealth()
-      .then((h) => setTtsBackend(h))
-      .catch(() => setTtsBackend({ available: false }));
-  }, []);
+    void refreshVoiceHealth();
+    const interval = window.setInterval(() => { void refreshVoiceHealth(); }, 5000);
+    window.addEventListener('focus', refreshVoiceHealth);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshVoiceHealth);
+    };
+  }, [settings.apiUrl]);
 
   const showSaved = () => {
     setSaved(true);
@@ -858,22 +870,25 @@ export function SettingsPage() {
                 <span
                   className="w-2 h-2 rounded-full"
                   style={{
-                    background: speechBackendAvailable === true ? 'var(--color-success)'
-                      : speechBackendAvailable === false ? 'var(--color-text-tertiary)'
-                      : 'var(--color-text-tertiary)',
+                    background: speechBackend?.available ? 'var(--color-success)' : 'var(--color-text-tertiary)',
                   }}
                 />
                 <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                  {speechBackendAvailable === null ? 'Checking...'
-                    : speechBackendAvailable ? 'Available'
-                    : 'Not configured'}
+                  {speechBackend === null ? 'Checking...'
+                    : speechBackend.available ? (speechBackend.backend || 'Available')
+                    : 'Unavailable'}
                 </span>
               </div>
             </SettingRow>
-            {!speechBackendAvailable && speechBackendAvailable !== null && (
+            {speechBackend && !speechBackend.available && (
               <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
-                Set up a speech backend to use voice input.
-                See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
+                {speechBackend.reason || 'Set up a speech backend to use voice input.'}
+                {' '}See the <a href="https://open-jarvis.github.io/OpenJarvis/user-guide/tools/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>documentation</a> for details.
+              </div>
+            )}
+            {ttsBackend && !ttsBackend.available && ttsBackend.reason && (
+              <div className="text-xs mt-2 px-1" style={{ color: 'var(--color-text-tertiary)' }}>
+                Voice output: {ttsBackend.reason}
               </div>
             )}
           </Section>
