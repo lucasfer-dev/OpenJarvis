@@ -30,9 +30,12 @@ def _extract_command(text: str, wake_word: str) -> str | None:
 
 def _run_via_server(command: str) -> str | None:
     """Use the already-running Desktop API to avoid a Python cold start per phrase."""
+    from openjarvis.core.config import load_config
+
+    model = load_config().intelligence.default_model
     payload = json.dumps(
         {
-            "model": "qwen3.5:2b",
+            "model": model,
             "messages": [{"role": "user", "content": command}],
             "stream": False,
         }
