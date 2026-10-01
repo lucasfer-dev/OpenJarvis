@@ -143,6 +143,60 @@ def test_health_no_backend():
     assert data["available"] is False
 
 
+def test_speech_health_retries_discovery_after_startup_failure(mock_speech_backend):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from openjarvis.server.api_routes import speech_router
+
+    app = FastAPI()
+    app.state.speech_backend = None
+    app.state.config = SimpleNamespace(speech=SimpleNamespace(backend="auto"))
+    app.include_router(speech_router)
+    client = TestClient(app)
+
+    with patch(
+        "openjarvis.speech._discovery.get_speech_backend",
+        side_effect=[None, mock_speech_backend],
+    ) as discover:
+        assert client.get("/v1/speech/health").json()["available"] is False
+        second = client.get("/v1/speech/health").json()
+        assert second["available"] is True
+        assert second["backend"] == "mock"
+        assert client.get("/v1/speech/health").json()["available"] is True
+
+    assert discover.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_speech_health_requests_share_discovery(mock_speech_backend):
+    from fastapi import FastAPI
+
+    from openjarvis.server.api_routes import speech_router
+
+    app = FastAPI()
+    app.state.speech_backend = None
+    app.state.config = SimpleNamespace(speech=SimpleNamespace(backend="auto"))
+    app.include_router(speech_router)
+
+    def discover(_config):
+        time.sleep(0.05)
+        return mock_speech_backend
+
+    with patch(
+        "openjarvis.speech._discovery.get_speech_backend", side_effect=discover
+    ) as mock_discover:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://testserver"
+        ) as client:
+            responses = await asyncio.gather(
+                *(client.get("/v1/speech/health") for _ in range(3))
+            )
+
+    assert all(response.json()["available"] is True for response in responses)
+    assert mock_discover.call_count == 1
+
+
 # ---------------------------------------------------------------------------
 # Text-to-speech
 # ---------------------------------------------------------------------------
