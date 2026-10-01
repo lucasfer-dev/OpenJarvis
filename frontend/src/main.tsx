@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import App from './App';
-import { initApiBase } from './lib/api';
+import { initApiBase, isTauri } from './lib/api';
 import { initAnalytics } from './lib/analytics';
 import './index.css';
 
