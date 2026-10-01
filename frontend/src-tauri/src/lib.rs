@@ -455,6 +455,58 @@ impl BackendManager {
 
 type SharedBackend = Arc<Mutex<BackendManager>>;
 
+// ---------------------------------------------------------------------------
+// VoiceModeManager — owns the continuous local microphone assistant process
+// ---------------------------------------------------------------------------
+
+#[derive(Default)]
+struct VoiceModeManager {
+    child: Option<ChildHandle>,
+}
+
+type SharedVoiceMode = Arc<Mutex<VoiceModeManager>>;
+
+#[derive(serde::Serialize)]
+struct VoiceModeStatus {
+    active: bool,
+    detail: String,
+}
+
+impl VoiceModeManager {
+    fn status(&mut self) -> Result<VoiceModeStatus, String> {
+        if let Some(handle) = self.child.as_mut() {
+            match handle.child.try_wait() {
+                Ok(None) => {
+                    return Ok(VoiceModeStatus {
+                        active: true,
+                        detail: "Listening for Jarvis".into(),
+                    });
+                }
+                Ok(Some(status)) => {
+                    self.child = None;
+                    return Ok(VoiceModeStatus {
+                        active: false,
+                        detail: format!("Voice mode stopped ({status})"),
+                    });
+                }
+                Err(err) => return Err(format!("Could not inspect voice mode: {err}")),
+            }
+        }
+
+        Ok(VoiceModeStatus {
+            active: false,
+            detail: "Voice mode is off".into(),
+        })
+    }
+
+    async fn stop(&mut self) {
+        if let Some(handle) = self.child.as_mut() {
+            handle.kill().await;
+        }
+        self.child = None;
+    }
+}
+
 /// Spawn exactly one tracked boot task. Keeping its handle lets recovery
 /// abort an in-flight endpoint check/model download before killing children.
 async fn start_managed_boot(backend: SharedBackend, status: SharedStatus) {
@@ -2943,6 +2995,78 @@ async fn speech_health(api_url: String) -> Result<serde_json::Value, String> {
     serde_json::from_str(&body).map_err(|e| format!("Invalid response: {}", e))
 }
 
+#[tauri::command]
+async fn get_voice_mode_status(
+    voice_mode: tauri::State<'_, SharedVoiceMode>,
+) -> Result<VoiceModeStatus, String> {
+    voice_mode.lock().await.status()
+}
+
+#[tauri::command]
+async fn start_voice_mode(
+    voice_mode: tauri::State<'_, SharedVoiceMode>,
+    setup_status: tauri::State<'_, SharedStatus>,
+    wake_word: Option<String>,
+) -> Result<VoiceModeStatus, String> {
+    if !setup_status.lock().await.server_ready {
+        return Err("Jarvis backend is not ready yet.".into());
+    }
+
+    let mut manager = voice_mode.lock().await;
+    if manager.status()?.active {
+        return manager.status();
+    }
+
+    let root = find_project_root()
+        .ok_or_else(|| "Could not locate the OpenJarvis project directory.".to_string())?;
+    let uv_bin = resolve_bin("uv");
+    let wake_word = wake_word
+        .unwrap_or_else(|| "jarvis".into())
+        .trim()
+        .to_string();
+    let wake_word = if wake_word.is_empty() {
+        "jarvis".to_string()
+    } else {
+        wake_word
+    };
+
+    let mut cmd = tokio::process::Command::new(&uv_bin);
+    cmd.args([
+        "run",
+        "jarvis",
+        "voice-assistant",
+        "--wake-word",
+        wake_word.as_str(),
+    ])
+    .current_dir(root)
+    .stdin(std::process::Stdio::null())
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null());
+    prepare_subprocess_for_appimage(&mut cmd);
+    add_cargo_bin_to_path(&mut cmd);
+
+    let child = spawn_owned_child(&mut cmd)
+        .map_err(|err| format!("Could not start voice mode: {err}"))?;
+    manager.child = Some(ChildHandle { child });
+
+    Ok(VoiceModeStatus {
+        active: true,
+        detail: format!("Listening for {wake_word}"),
+    })
+}
+
+#[tauri::command]
+async fn stop_voice_mode(
+    voice_mode: tauri::State<'_, SharedVoiceMode>,
+) -> Result<VoiceModeStatus, String> {
+    let mut manager = voice_mode.lock().await;
+    manager.stop().await;
+    Ok(VoiceModeStatus {
+        active: false,
+        detail: "Voice mode is off".into(),
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Native macOS overlay — NSPanel + WKWebView, entirely bypassing Tauri's
 // window management so we get proper always-on-top, transparency, non-
@@ -3339,6 +3463,7 @@ async fn hide_overlay() -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let backend: SharedBackend = Arc::new(Mutex::new(BackendManager::default()));
+    let voice_mode: SharedVoiceMode = Arc::new(Mutex::new(VoiceModeManager::default()));
     let configured_at_launch = match read_configured_inference_config() {
         Some(cfg) if cfg.confirmed => {
             // A confirmed source never consumes a staging slot. Clear any
@@ -3371,6 +3496,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(backend.clone())
         .manage(status.clone())
+        .manage(voice_mode.clone())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -3481,6 +3607,9 @@ pub fn run() {
             speech_health,
             tts_health,
             synthesize_speech,
+            get_voice_mode_status,
+            start_voice_mode,
+            stop_voice_mode,
             pull_ollama_model,
             delete_ollama_model,
             save_cloud_key,
