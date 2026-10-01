@@ -12,7 +12,14 @@ declare global {
   }
 }
 
-export const isTauri = () => typeof window !== 'undefined' && !!window.__TAURI_INTERNALS__;
+export const isTauri = () => {
+  if (typeof window === 'undefined') return false;
+  return (
+    !!window.__TAURI_INTERNALS__
+    || window.location.hostname === 'tauri.localhost'
+    || window.location.protocol === 'tauri:'
+  );
+};
 
 export type CloudKeyStatus = Record<string, boolean>;
 
