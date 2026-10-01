@@ -394,6 +394,29 @@ export async function transcribeAudio(audioBlob: Blob, filename = 'recording.web
   return res.json();
 }
 
+export interface VoiceModeStatus {
+  active: boolean;
+  detail: string;
+}
+
+export async function getVoiceModeStatus(): Promise<VoiceModeStatus> {
+  if (!isTauri()) return { active: false, detail: 'Desktop voice mode is unavailable in the browser.' };
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<VoiceModeStatus>('get_voice_mode_status');
+}
+
+export async function startVoiceMode(wakeWord = 'jarvis'): Promise<VoiceModeStatus> {
+  if (!isTauri()) throw new Error('Voice mode is available in the desktop app only.');
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<VoiceModeStatus>('start_voice_mode', { wakeWord });
+}
+
+export async function stopVoiceMode(): Promise<VoiceModeStatus> {
+  if (!isTauri()) return { active: false, detail: 'Voice mode is off' };
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<VoiceModeStatus>('stop_voice_mode');
+}
+
 export interface TtsHealth {
   available: boolean;
   backend?: string;
